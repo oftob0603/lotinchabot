@@ -32,6 +32,13 @@ XAVFSIZLIK (faqat egasi uchun ishlaydi):
   - /myid buyrug'i orqali istalgan kishi o'z Telegram ID'sini bilib
     olishi mumkin (buni sizga yuborib, admin sifatida qo'shdirishi
     uchun kerak bo'ladi).
+  - Admin bo'lmagan kishi botga /start bossa, "Kanalimizga e'lon berish
+    uchun <CONTACT_USERNAME>ga yozing" degan xabar ko'rsatiladi
+    (.env dagi CONTACT_USERNAME orqali sozlanadi).
+  - Guruhda kimdir qo'shilganda/chiqqanda Telegram chiqaradigan
+    "... guruhga qo'shildi" / "... guruhdan chiqdi" xabarlari
+    ruxsat berilgan chatlarda avtomatik o'chiriladi (buning uchun
+    botda "Delete Messages" admin huquqi yoqilgan bo'lishi shart).
 
 O'rnatish:
   pip install -r requirements.txt
@@ -86,6 +93,10 @@ if not BOT_TOKEN:
 
 ADMINS_FILE = os.getenv("ADMINS_FILE", "admins.json")
 ALLOWED_CHATS_FILE = os.getenv("ALLOWED_CHATS_FILE", "allowed_chats.json")
+
+# Admin bo'lmagan kishi botga /start bosganda ko'rsatiladigan kontakt
+# (e'lon berish uchun murojaat qilinadigan admin username'i)
+CONTACT_USERNAME = os.getenv("CONTACT_USERNAME", "@admin")
 
 logging.basicConfig(level=logging.INFO)
 bot = Bot(token=BOT_TOKEN)
@@ -302,9 +313,7 @@ def _truncate(text: str, limit: int) -> str:
 async def cmd_start(message: Message):
     if not is_admin(message.from_user.id):
         await message.answer(
-            "⛔ Kechirasiz, bu bot faqat egasi uchun ishlaydi.\n"
-            f"Sizning ID: <code>{message.from_user.id}</code>",
-            parse_mode="HTML",
+            f"Kanalimizga e'lon berish uchun {CONTACT_USERNAME} ga yozing."
         )
         return
     await message.answer(
@@ -424,6 +433,26 @@ async def on_my_chat_member(update: ChatMemberUpdated):
     elif new_status in ("left", "kicked"):
         allowed_chats.discard(chat.id)
         save_allowed_chats()
+
+
+# ---------------------------------------------------------------------------
+# Guruhga a'zo qo'shilgan/chiqqanda Telegram avtomatik chiqaradigan
+# "... guruhga qo'shildi" / "... guruhdan chiqdi" degan tizim xabarlarini
+# o'chirib, guruhni toza tutish
+# ---------------------------------------------------------------------------
+
+@dp.message(F.new_chat_members | F.left_chat_member)
+async def on_membership_service_message(message: Message):
+    if message.chat.id not in allowed_chats:
+        return
+    try:
+        await message.delete()
+    except Exception:
+        logging.warning(
+            "Qo'shildi/chiqdi xabarini o'chirib bo'lmadi (chat_id=%s) — "
+            "botda 'Delete Messages' huquqi bormi tekshiring.",
+            message.chat.id,
+        )
 
 
 # ---------------------------------------------------------------------------
